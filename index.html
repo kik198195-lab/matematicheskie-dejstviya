@@ -215,6 +215,29 @@ button:focus-visible{outline:4px solid #ffdf5e;outline-offset:3px}
 .qcard.done .cn small{visibility:visible;animation:cardIn .4s}
 .num.name{font-size:20px;min-width:150px;height:56px}
 .compmode .wagon{display:none}
+.modes .mode:last-child:nth-child(odd){grid-column:1/-1}
+/* --- перетаскивание названий --- */
+.dragmode .stage{padding-bottom:120px}
+.exs{display:grid;gap:12px 18px;margin-top:4px}
+.exs.two{grid-template-columns:1fr 1fr}
+.ex{display:flex;align-items:flex-start;justify-content:center;gap:4px;background:#f5f8ff;border-radius:18px;padding:10px 6px 8px}
+.ex .op{font-size:clamp(24px,4.4vw,34px);font-weight:900;line-height:1.2;padding:0 2px;color:var(--ink2)}
+.cell{display:flex;flex-direction:column;align-items:center;gap:5px}
+.cell .n{font-size:clamp(24px,4.4vw,34px);font-weight:900;line-height:1.2}
+.slot{min-width:clamp(80px,13vw,112px);height:32px;border:2.5px dashed #b9c6e4;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;
+  font-size:clamp(11px,1.9vw,14px);font-weight:900;padding:0 6px;transition:background .15s,border-color .15s}
+.slot.over{border-color:var(--times);background:#e8f0ff}
+.slot.ok{border:2.5px solid var(--good);background:#e6f9ec;color:#187a3c;animation:pop .35s}
+.slot.no{animation:shake .4s;border-color:var(--bad);background:#fde9e9}
+.pool{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px;min-height:40px}
+.chip{touch-action:none;cursor:grab;font-size:clamp(13px,2vw,16px);font-weight:900;padding:8px 14px;border-radius:12px;background:#fff;border:2.5px solid #c9d6f2;
+  box-shadow:0 4px 0 #c9d6f2;color:var(--ink);transition:transform .12s,opacity .2s}
+.chip:hover{transform:translateY(-2px)}
+.chip.sel{border-color:var(--times);box-shadow:0 4px 0 var(--times);background:#eef4ff}
+.chip.used{visibility:hidden}
+.chip.ghost{position:fixed;z-index:70;pointer-events:none;transform:translate(-50%,-50%) rotate(-3deg) scale(1.08);box-shadow:0 10px 24px rgba(0,0,0,.25);cursor:grabbing;transition:none}
+.chip.fly{transition:left .45s cubic-bezier(.3,.8,.3,1),top .45s cubic-bezier(.3,.8,.3,1)}
+@media (max-width:640px){.exs.two{grid-template-columns:1fr}.ex{padding:8px 4px 6px}.slot{min-width:84px;height:28px}.dragmode .stage{padding-bottom:110px}}
 .confetti{position:absolute;z-index:60;width:10px;height:14px;border-radius:2px;pointer-events:none;animation:fall 1.3s ease-in forwards}
 @keyframes fall{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
 
@@ -318,6 +341,7 @@ button:focus-visible{outline:4px solid #ffdf5e;outline-offset:3px}
         <button class="mode" data-mode="test"><span class="em">⏱️</span><span class="txt"><h3>Испытание</h3><p>Без подсказок, 12 секунд на ответ, бонус за скорость</p></span><span class="best" data-best="test"></span></button>
         <button class="mode" data-mode="tasks"><span class="em">📚</span><span class="txt"><h3>Задачи</h3><p>Выбери действие и найди ответ задачи</p></span><span class="best" data-best="tasks"></span></button>
         <button class="mode" data-mode="comp"><span class="em">🧩</span><span class="txt"><h3>Компоненты действий</h3><p>Слагаемое, сумма, уменьшаемое… Как называется число?</p></span><span class="best" data-best="comp"></span></button>
+        <button class="mode" data-mode="drag"><span class="em">🏷️</span><span class="txt"><h3>Подпиши компоненты</h3><p>Перетащи названия под числа в примерах</p></span><span class="best" data-best="drag"></span></button>
       </div>
       <div class="row"><button class="btn" id="btnRules">📖 Шпаргалка</button></div>
       <div class="credit">2–3 класс · Разработчик: Курбаниязова Ильмира Климентовна · Instagram <a href="https://instagram.com/dlya.urokov23/" target="_blank" rel="noopener">@dlya.urokov23</a></div>
@@ -524,6 +548,7 @@ function opsSequence(n,ops){
 function buildRound(mode,grade){
   const L=grade==='1'?1:2, ops=L===1?['plus','minus']:ORDER;
   if(mode==='comp') return opsSequence(L===1?10:12,ops).map(op=>compItem(op,L));
+  if(mode==='drag') return [0,1,2].map(()=>({kind:'drag',op:'drag',exs:ops.map(op=>({op,nums:compItem(op,L).nums}))}));
   const isTask=mode==='tasks', n=isTask?8:(L===1?10:12), seq=opsSequence(n,ops), used={};
   return seq.map(op=>{
     const bank=(isTask?TASKS:PHR)[op];
@@ -586,7 +611,8 @@ function startGame(mode){
   app.classList.toggle('hints',mode==='train');
   qcard.classList.toggle('keys',mode==='train');
   qcard.classList.toggle('with-timer',mode==='test');
-  app.classList.toggle('compmode',mode==='comp');
+  app.classList.toggle('compmode',mode==='comp'||mode==='drag');
+  app.classList.toggle('dragmode',mode==='drag');
   $('#score').textContent=0; paintStreak(); show(null);
   train.classList.add('left'); train.classList.remove('away');
   renderQ(); trainIn();
@@ -604,7 +630,16 @@ function renderQ(){
   qcard.classList.remove('good','bad','done','enter'); void qcard.offsetWidth; qcard.classList.add('enter');
   fb.innerHTML=''; exprEl.className='expr'; exprEl.innerHTML=''; numsEl.className='nums'; numsEl.innerHTML='';
   btnNext.classList.remove('show');
-  if(q.kind==='comp'){
+  selChip=null;
+  if(q.kind==='drag'){
+    qtag.textContent='Перетащи названия под числа';
+    const cell=(e,ei,i)=>`<div class="cell"><span class="n">${e.nums[i]}</span><div class="slot" data-name="${COMP[e.op][i]}" data-ex="${ei}" data-i="${i}"></div></div>`;
+    qtext.className='qtext dragq';
+    qtext.innerHTML=`<div class="exs${q.exs.length>2?' two':''}">`+q.exs.map((e,ei)=>
+      `<div class="ex">${cell(e,ei,0)}<span class="op">${OPS[e.op].sym}</span>${cell(e,ei,1)}<span class="op">=</span>${cell(e,ei,2)}</div>`).join('')+'</div>';
+    numsEl.className='pool';
+    numsEl.innerHTML=shuffle(q.exs.flatMap(e=>COMP[e.op])).map(n=>`<button class="chip" data-name="${n}">${n}</button>`).join('');
+  }else if(q.kind==='comp'){
     qtag.textContent='Как называется выделенное число?';
     qtext.className='qtext compq'; qtext.innerHTML=compHTML(q);
     numsEl.innerHTML=q.opts.map((v,i)=>`<button class="num name" data-v="${v}" data-k="${i+1}" disabled>${v}</button>`).join('');
@@ -624,6 +659,7 @@ function trainIn(){
   train.classList.remove('left'); sfx.whistle();
   setTimeout(()=>{app.classList.remove('moving');app.classList.add('idle');
     if(S.mode==='comp'){S.phase='comp';numsEl.querySelectorAll('.num').forEach(b=>b.disabled=false);return}
+    if(S.mode==='drag'){S.phase='drag';return}
     S.phase='op'; wagons.forEach(w=>w.disabled=false); startTimer();},800);
 }
 function trainOut(cb){
@@ -757,6 +793,52 @@ function confetti(el,count=18){
 /* ---------- events ---------- */
 wagons.forEach(w=>w.addEventListener('click',()=>chooseOp(w.dataset.op)));
 numsEl.addEventListener('click',e=>{const b=e.target.closest('.num');if(!b||!S)return;if(S.phase==='comp')chooseName(b);else chooseNum(b)});
+/* ---------- перетаскивание названий компонентов ---------- */
+let drag=null, selChip=null;
+function slotAt(x,y){const el=document.elementFromPoint(x,y);if(!el)return null;const c=el.closest('.cell');return c&&qtext.contains(c)?c.querySelector('.slot'):null}
+function clearOver(){qtext.querySelectorAll('.slot.over').forEach(s=>s.classList.remove('over'))}
+function selectChip(c){if(selChip)selChip.classList.remove('sel');selChip=(selChip===c)?null:c;if(selChip){selChip.classList.add('sel');sfx.click()}}
+function tryPlace(chip,slot){
+  if(!S||S.phase!=='drag'||slot.classList.contains('ok'))return;
+  if(selChip){selChip.classList.remove('sel');selChip=null}
+  const q=S.list[S.i], ok=chip.dataset.name===slot.dataset.name;
+  if(ok){
+    slot.textContent=slot.dataset.name; slot.classList.remove('no'); slot.classList.add('ok'); chip.remove(); S.checks++;
+    if(!slot.dataset.bad){S.right++;S.streak++;S.bestStreak=Math.max(S.bestStreak,S.streak);addScore(5)}
+    tone(880,0,.12,'triangle',.14);tone(1320,.07,.18,'triangle',.12);
+  }else{
+    slot.classList.remove('no');void slot.offsetWidth;slot.classList.add('no');sfx.bad();S.streak=0;
+    if(!slot.dataset.bad){slot.dataset.bad=1;const e=q.exs[+slot.dataset.ex];
+      S.mistakes.push({step:'comp',op:e.op,expr:`${e.nums[0]} ${OPS[e.op].sym} ${e.nums[1]} = ${e.nums[2]}`,num:e.nums[+slot.dataset.i],ans:slot.dataset.name,chose:chip.dataset.name})}
+  }
+  paintStreak();
+  if(!qtext.querySelector('.slot:not(.ok)')){
+    S.phase='busy'; qcard.classList.add('good'); sfx.good(); confetti(qcard,30);
+    fb.innerHTML=`<span class="verdict g">Все названия на месте!</span><span class="rule">${q.exs.map(e=>COMP_RULE[e.op]).join('<br>')}</span>`;
+    autoId=setTimeout(next,2600);
+  }
+}
+numsEl.addEventListener('pointerdown',e=>{
+  const c=e.target.closest('.chip'); if(!c||!S||S.phase!=='drag')return;
+  e.preventDefault(); drag={chip:c,x:e.clientX,y:e.clientY,ghost:null,moved:false};
+});
+document.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  if(!drag.moved){if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<6)return;
+    drag.moved=true;const g=drag.chip.cloneNode(true);g.classList.remove('sel');g.classList.add('ghost');app.appendChild(g);drag.ghost=g;drag.chip.classList.add('used')}
+  drag.ghost.style.left=e.clientX+'px';drag.ghost.style.top=e.clientY+'px';
+  clearOver();const s=slotAt(e.clientX,e.clientY);if(s&&!s.classList.contains('ok'))s.classList.add('over');
+});
+function endDrag(e,cancel){
+  if(!drag)return;const d=drag;drag=null;clearOver();
+  if(!d.moved){if(!cancel)selectChip(d.chip);return}
+  d.ghost.remove();d.chip.classList.remove('used');
+  if(!cancel){const s=slotAt(e.clientX,e.clientY);if(s)tryPlace(d.chip,s)}
+}
+document.addEventListener('pointerup',e=>endDrag(e,false));
+document.addEventListener('pointercancel',e=>endDrag(e,true));
+qtext.addEventListener('click',e=>{if(!S||S.phase!=='drag'||!selChip)return;const c=e.target.closest('.cell');if(c)tryPlace(selChip,c.querySelector('.slot'))});
+
 function chooseName(btn){
   if(S.phase!=='comp')return; S.phase='busy';
   const q=S.list[S.i], good=btn.dataset.v===q.ans; S.checks++;
